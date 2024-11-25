@@ -117,9 +117,31 @@ class Zombie:
             return  BehaviorTree.FAIL
         pass
 
+    def ball_cmp(self, num):
+        if num==1:
+            if self.ball_count >= play_mode.boy.ball_count:
+                return BehaviorTree.SUCCESS
+            else: return BehaviorTree.FAIL
+        elif num==2:
+            if self.ball_count < play_mode.boy.ball_count:
+                return BehaviorTree.SUCCESS
+            else: return BehaviorTree.FAIL
+
     def move_to_boy(self, r=0.5):
         self.state='Walk'
         self.move_slightly_to(play_mode.boy.x,play_mode.boy.y)
+        if self.distance_less_than(play_mode.boy.x,play_mode.boy.y, self.x,self.y,r):
+            return BehaviorTree.SUCCESS
+        else:
+            return BehaviorTree.RUNNING
+        pass
+
+    def runaway_to_boy(self, r=0.5):
+        self.state='Walk'
+        self.dir = math.atan2(play_mode.boy.y - self.y, play_mode.boy.x - self.x)
+        distance = RUN_SPEED_PPS * game_framework.frame_time
+        self.x -= distance * math.cos(self.dir)
+        self.y -= distance * math.sin(self.dir)
         if self.distance_less_than(play_mode.boy.x,play_mode.boy.y, self.x,self.y,r):
             return BehaviorTree.SUCCESS
         else:
@@ -141,13 +163,19 @@ class Zombie:
         root = wander = Sequence('Wander',a3,a2)
 
         c1 = Condition('소년이 근처에 있는가?', self.is_boy_nearby, 7)
+        c2 = Condition('좀비 공 >= 소년 공?',self.ball_cmp,1)
+        c3 = Condition('좀비 공 < 소년 공?',self.ball_cmp,2)
         a4 = Action('소년한테 접근', self.move_to_boy)
-        root = chase_boy = Sequence('소년을 추적', c1, a4)
+        a5 = Action('소년으로부터 도망',self.runaway_to_boy)
+        root = chase_boy = Sequence('소년을 추적', c2, a4)
+        root = runaway = Sequence('도망', c3,a5)
+        root = chase_or_runaway = Selector('추적 또는 도망', chase_boy,runaway)
+        root = nearby = Sequence('소년이 추적할지 도망갈지', c1, chase_or_runaway)
 
-        root = chase_or_flee = Selector('추적 또는 배회', chase_boy,wander)
+        #a5 = Action('순찰 위치 가져오기', self.get_patrol_location)
+        #root = patrol = Sequence('순찰', a5, a2)
 
-        a5 = Action('순찰 위치 가져오기', self.get_patrol_location)
-        root = patrol = Sequence('순찰',a5,a2)
+        root = chase_or_flee = Selector('추적&도망 또는 배회', nearby,wander)
 
         self.bt = BehaviorTree(root)
         pass
